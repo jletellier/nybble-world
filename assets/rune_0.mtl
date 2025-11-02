@@ -1,0 +1,6 @@
+# Created by Kenney (www.kenney.nl)
+
+newmtl rune_0
+Kd 1 1 1
+map_Kd Textures/rune_0.png
+

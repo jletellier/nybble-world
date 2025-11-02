@@ -1,0 +1,82 @@
+[gd_scene load_steps=10 format=3 uid="uid://c2h5tr3qn2eby"]
+
+[ext_resource type="ArrayMesh" uid="uid://dlkf186u15mfy" path="res://assets/rune_0.obj" id="1_0h7nl"]
+[ext_resource type="PackedScene" uid="uid://dk3cmlw5t6g12" path="res://test_grid.tscn" id="2_0h7nl"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_0h7nl"]
+size = Vector3(1, 0.1, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0h7nl"]
+albedo_color = Color(0.39607844, 0.3529412, 1, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_mer1j"]
+material = SubResource("StandardMaterial3D_0h7nl")
+size = Vector3(1, 0.5, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mer1j"]
+albedo_color = Color(0.9019608, 0.18431373, 0.8901961, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_s6xjt"]
+material = SubResource("StandardMaterial3D_mer1j")
+size = Vector3(1, 2, 1)
+
+[sub_resource type="MeshLibrary" id="MeshLibrary_mer1j"]
+item/0/name = "Rune0"
+item/0/mesh = SubResource("BoxMesh_0h7nl")
+item/0/mesh_transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+item/0/mesh_cast_shadow = 1
+item/0/shapes = []
+item/0/navigation_mesh_transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+item/0/navigation_layers = 1
+item/1/name = "Rune1"
+item/1/mesh = SubResource("BoxMesh_mer1j")
+item/1/mesh_transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+item/1/mesh_cast_shadow = 1
+item/1/shapes = []
+item/1/navigation_mesh_transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+item/1/navigation_layers = 1
+item/2/name = "Rune2"
+item/2/mesh = SubResource("BoxMesh_s6xjt")
+item/2/mesh_transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+item/2/mesh_cast_shadow = 1
+item/2/shapes = []
+item/2/navigation_mesh_transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+item/2/navigation_layers = 1
+item/3/name = "Rune3"
+item/3/mesh = ExtResource("1_0h7nl")
+item/3/mesh_transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+item/3/mesh_cast_shadow = 1
+item/3/shapes = []
+item/3/navigation_mesh_transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+item/3/navigation_layers = 1
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_s6xjt"]
+viewport_path = NodePath("Sprite3D/SubViewport")
+
+[node name="Test3D" type="Node3D"]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.7071068, 0.7071068, 0, -0.7071068, 0.7071068, 0, 30, 30)
+projection = 1
+size = 16.0
+
+[node name="GridMap" type="GridMap" parent="."]
+mesh_library = SubResource("MeshLibrary_mer1j")
+cell_size = Vector3(1, 1, 1)
+cell_center_y = false
+data = {
+"cells": PackedInt32Array(65535, 2, 0, 65535, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 3, 0, 524290, 0, 65530, 524290, 2, 65530, 3)
+}
+
+[node name="Sprite3D" type="Sprite3D" parent="."]
+centered = false
+offset = Vector2(-7.97, -238)
+pixel_size = 0.125
+axis = 1
+texture_filter = 0
+texture = SubResource("ViewportTexture_s6xjt")
+
+[node name="SubViewport" type="SubViewport" parent="Sprite3D"]
+
+[node name="TestGrid" parent="Sprite3D/SubViewport" instance=ExtResource("2_0h7nl")]
+position = Vector2(0, 250)
