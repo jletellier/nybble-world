@@ -22,9 +22,8 @@ const TILE_EMPTY := Vector2i.ZERO
 const TILE_PATH := Vector2i(1, 0)
 const TILE_CONDUCTOR := Vector2i(2, 0)
 const TILE_OCTALS := Vector2i(0, 1)
-const TILE_TRANSFORM_OR := Vector2i(0, 5)
+const TILE_TRANSFORM_NOT := Vector2i(0, 5)
 const TILE_TRANSFORM_SHIFT := Vector2i(0, 6)
-const TILE_TRANSFORM_NAND := Vector2i(0, 7)
 const TILE_EMITTERS := Vector2i(0, 8)
 const TILE_OBJECTS := Vector2i(0, 10)
 
@@ -150,9 +149,10 @@ func _tick() -> void:
 	for pos in cell_positions:
 		var tile: Vector2i = cell_tiles[pos]
 		
-		var neighbor_values: Array[int] = []
-		var neighbor_dirs: Array[int] = []
-		var neighbor_trigger_values: Array[int] = []
+		var neighbor_count := 0
+		var neighbor_value := -1
+		var neighbor_dir := -1
+		var neighbor_has_modifier := false
 		
 		for neighbor_i in VON_NEUMANN_NEIGHBORS.size():
 			var neighbor_pos := VON_NEUMANN_NEIGHBORS[neighbor_i] + pos
@@ -161,39 +161,42 @@ func _tick() -> void:
 				continue
 			
 			var neighbor_tile: Vector2i = cell_tiles[neighbor_pos]
-			var target_dir := (neighbor_i + 2) % 4
+			
+			if neighbor_tile == TILE_CONDUCTOR:
+				continue
+			
+			neighbor_dir = (neighbor_i + 2) % 4
 			
 			if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 				var current_dir := neighbor_tile.y - TILE_OCTALS.y
-				if current_dir != (target_dir + 2) % 4:
-					neighbor_values.append(neighbor_tile.x)
-					neighbor_dirs.append(target_dir)
+				if current_dir != neighbor_i:
+					neighbor_value = neighbor_tile.x
+					neighbor_count += 1
+					continue
 			
-			if neighbor_tile.y == TILE_EMITTERS.y + 1:
-				neighbor_values.append(neighbor_tile.x)
-				neighbor_dirs.append(target_dir)
+			if neighbor_tile.y in [TILE_EMITTERS.y + 1, TILE_OBJECTS.y + 1]:
+				neighbor_value = neighbor_tile.x
+				neighbor_count += 1
+				continue
 			
-			if neighbor_tile.y == TILE_OBJECTS.y + 1:
-				neighbor_trigger_values.append(neighbor_tile.x)
-			
-			if neighbor_tile.y == TILE_TRANSFORM_OR.y:
+			if neighbor_tile.y == TILE_TRANSFORM_NOT.y:
 				if neighbor_tile.x > 0:
-					neighbor_values.append(neighbor_tile.x)
-					neighbor_dirs.append(target_dir)
+					neighbor_value = neighbor_tile.x
+					neighbor_count += 1
+					neighbor_has_modifier = true
+					continue
 		
-		if tile.y == TILE_TRANSFORM_OR.y:
-			if neighbor_values.size() == 2:
-				var new_value = neighbor_values.reduce(func(accum, number): return accum | number, 0)
-				_particle_layer.set_cell(pos, 0, TILE_TRANSFORM_OR + Vector2i(new_value, 0))
+		if tile.y == TILE_TRANSFORM_NOT.y:
+			if neighbor_count == 1:
+				var new_value = (~neighbor_value) & 0b111
+				_particle_layer.set_cell(pos, 0, TILE_TRANSFORM_NOT + Vector2i(new_value, 0))
 				continue
 		
 		if tile.y in [TILE_OBJECTS.y, TILE_OBJECTS.y + 1]:
 			var current_value = tile.x
-			var new_value = current_value
-			if neighbor_trigger_values.size() > 0:
-				new_value = neighbor_trigger_values.reduce(func(accum, number): return accum | number, 0)
-			if neighbor_values.size() > 0:
-				new_value = neighbor_values.reduce(func(accum, number): return accum | number, 0)
+			var new_value = 0
+			if neighbor_count == 1:
+				new_value = neighbor_value
 			
 			if new_value != current_value:
 				_particle_layer.set_cell(pos, 0, TILE_OBJECTS + Vector2i(new_value, 1))
@@ -203,13 +206,13 @@ func _tick() -> void:
 				_particle_layer.set_cell(pos, 0, TILE_OBJECTS + Vector2i(current_value, 0))
 				continue
 		
-		if neighbor_values.size() == 1:
+		if neighbor_count == 1:
 			if tile == TILE_CONDUCTOR:
-				var new_tile := TILE_OCTALS + Vector2i(neighbor_values[0], neighbor_dirs[0])
+				var new_tile := TILE_OCTALS + Vector2i(neighbor_value, neighbor_dir)
 				_particle_layer.set_cell(pos, 0, new_tile)
 				continue
 		
-		if neighbor_values.size() == 0:
+		if neighbor_count == 0:
 			if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 				_particle_layer.set_cell(pos, 0, TILE_CONDUCTOR)
 				continue
