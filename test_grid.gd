@@ -1,3 +1,4 @@
+@tool
 extends Node2D
 
 
@@ -22,27 +23,29 @@ const TILE_EMPTY := Vector2i.ZERO
 const TILE_PATH := Vector2i(1, 0)
 const TILE_CONDUCTOR := Vector2i(2, 0)
 const TILE_OCTALS := Vector2i(0, 1)
-const TILE_TRANSFORM_NOT := Vector2i(0, 5)
-const TILE_TRANSFORM_SHIFT := Vector2i(0, 6)
-const TILE_EMITTERS := Vector2i(0, 8)
-const TILE_OBJECTS := Vector2i(0, 10)
+const TILE_EMITTERS := Vector2i(0, 5)
+const TILE_MODIFIERS := Vector2i(0, 7)
+const TILE_MODIFIER_NOT := Vector2i(0, 8)
+const TILE_MODIFIER_SHIFT := Vector2i(0, 9)
+const TILE_OBJECTS := Vector2i(0, 12)
 
-# For prototyping only
-const TILE_PLAYER := Vector2i(13, 0)
-const TILE_GOAL := Vector2i(4, 0)
-const TILE_GOAL_REACHED := Vector2i(5, 0)
+@export_tool_button("Tick Repeat") var tick_repeat_action := _tick_repeat
 
 var _last_input_action := ""
 var _last_input_delta := 0.0
 var _is_first_echo := true
 var _step_delta := 0.0
-var _player_pos := Vector2i.ZERO
+var _tick_changes_occured := false
+#var _player_pos := Vector2i.ZERO
 #var _player_tile := TILE_PLAYER
 
 @onready var _particle_layer := $"ParticleLayer" as TileMapLayer
 
 
-#func _ready() -> void:
+func _ready() -> void:
+	if Engine.is_editor_hint():
+		set_process(false)
+	
 	#var player_cells := _particle_layer.get_used_cells_by_id(0, _player_tile)
 	#if player_cells.size() > 0:
 		#_player_tile = TILE_OBJECTS + Vector2i(1, 0)
@@ -149,10 +152,15 @@ func _tick() -> void:
 	for pos in cell_positions:
 		var tile: Vector2i = cell_tiles[pos]
 		
-		var neighbor_count := 0
-		var neighbor_value := -1
-		var neighbor_dir := -1
-		var neighbor_has_modifier := false
+		if tile in [TILE_EMPTY, TILE_PATH]:
+			continue
+		
+		var current_value := -1
+		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4) or \
+				tile.y in [TILE_MODIFIER_NOT.y]:
+			current_value = tile.x
+		var new_value := -1
+		var new_dir := -1
 		
 		for neighbor_i in VON_NEUMANN_NEIGHBORS.size():
 			var neighbor_pos := VON_NEUMANN_NEIGHBORS[neighbor_i] + pos
@@ -162,57 +170,48 @@ func _tick() -> void:
 			
 			var neighbor_tile: Vector2i = cell_tiles[neighbor_pos]
 			
-			if neighbor_tile == TILE_CONDUCTOR:
-				continue
-			
-			neighbor_dir = (neighbor_i + 2) % 4
-			
-			if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
-				var current_dir := neighbor_tile.y - TILE_OCTALS.y
-				if current_dir != neighbor_i:
-					neighbor_value = neighbor_tile.x
-					neighbor_count += 1
-					continue
-			
-			if neighbor_tile.y in [TILE_EMITTERS.y + 1, TILE_OBJECTS.y + 1]:
-				neighbor_value = neighbor_tile.x
-				neighbor_count += 1
-				continue
-			
-			if neighbor_tile.y == TILE_TRANSFORM_NOT.y:
-				if neighbor_tile.x > 0:
-					neighbor_value = neighbor_tile.x
-					neighbor_count += 1
-					neighbor_has_modifier = true
+			if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4) or \
+					neighbor_tile.y in [TILE_EMITTERS.y + 1, TILE_MODIFIER_NOT.y]:
+				var target_value := neighbor_tile.x
+				
+				if new_value != -1:
+					new_value = -1
+					break
+				
+				if neighbor_tile.y == TILE_MODIFIER_NOT.y:
+					target_value = (~target_value) & 0b111
+				
+				var target_dir := -1
+				if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
+					target_dir = neighbor_tile.y - TILE_OCTALS.y
+				
+				if target_dir != neighbor_i:
+					new_dir = (neighbor_i + 2) % 4
+					new_value = target_value
 					continue
 		
-		if tile.y == TILE_TRANSFORM_NOT.y:
-			if neighbor_count == 1:
-				var new_value = (~neighbor_value) & 0b111
-				_particle_layer.set_cell(pos, 0, TILE_TRANSFORM_NOT + Vector2i(new_value, 0))
-				continue
+		if current_value == new_value:
+			continue
 		
-		if tile.y in [TILE_OBJECTS.y, TILE_OBJECTS.y + 1]:
-			var current_value = tile.x
-			var new_value = 0
-			if neighbor_count == 1:
-				new_value = neighbor_value
-			
-			if new_value != current_value:
-				_particle_layer.set_cell(pos, 0, TILE_OBJECTS + Vector2i(new_value, 1))
-				continue
-			
-			if tile.y - TILE_OBJECTS.y == 1:
-				_particle_layer.set_cell(pos, 0, TILE_OBJECTS + Vector2i(current_value, 0))
-				continue
+		_tick_changes_occured = true
 		
-		if neighbor_count == 1:
-			if tile == TILE_CONDUCTOR:
-				var new_tile := TILE_OCTALS + Vector2i(neighbor_value, neighbor_dir)
-				_particle_layer.set_cell(pos, 0, new_tile)
-				continue
-		
-		if neighbor_count == 0:
-			if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
+		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4) or tile == TILE_CONDUCTOR:
+			if new_value == -1:
 				_particle_layer.set_cell(pos, 0, TILE_CONDUCTOR)
-				continue
+			else:
+				_particle_layer.set_cell(pos, 0, TILE_OCTALS + Vector2i(new_value, new_dir))
+			continue
+		
+		if tile.y in [TILE_MODIFIERS.y, tile.y == TILE_MODIFIER_NOT.y]:
+			if new_value == -1:
+				_particle_layer.set_cell(pos, 0, TILE_MODIFIERS + Vector2i(tile.y, 0))
+			else:
+				_particle_layer.set_cell(pos, 0, TILE_MODIFIERS + Vector2i(new_value, tile.x))
+			continue
+
+
+func _tick_repeat() -> void:
+	_tick_changes_occured = true
+	while _tick_changes_occured:
+		_tick_changes_occured = false
+		_tick()
