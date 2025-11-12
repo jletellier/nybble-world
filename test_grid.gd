@@ -30,12 +30,13 @@ const TILE_MODIFIER_SHIFT := Vector2i(0, 9)
 const TILE_OBJECTS := Vector2i(0, 12)
 
 @export_tool_button("Tick Repeat") var tick_repeat_action := _tick_repeat
+@export var tick_limit := 50
 
 var _last_input_action := ""
 var _last_input_delta := 0.0
 var _is_first_echo := true
 var _step_delta := 0.0
-var _tick_changes_occured := false
+var _tick_changes := false
 #var _player_pos := Vector2i.ZERO
 #var _player_tile := TILE_PLAYER
 
@@ -152,15 +153,20 @@ func _tick() -> void:
 	for pos in cell_positions:
 		var tile: Vector2i = cell_tiles[pos]
 		
-		if tile in [TILE_EMPTY, TILE_PATH]:
+		if tile in [TILE_EMPTY, TILE_PATH] or \
+				tile.y in range(TILE_EMITTERS.y, TILE_EMITTERS.y + 1):
 			continue
 		
 		var current_value := -1
-		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4) or \
-				tile.y in [TILE_MODIFIER_NOT.y]:
+		var current_origin := -1
+		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 			current_value = tile.x
+			current_origin = tile.y - TILE_OCTALS.y
+		elif tile.y in [TILE_MODIFIER_NOT.y]:
+			current_value = tile.x
+		
 		var new_value := -1
-		var new_dir := -1
+		var new_origin := -1
 		
 		for neighbor_i in VON_NEUMANN_NEIGHBORS.size():
 			var neighbor_pos := VON_NEUMANN_NEIGHBORS[neighbor_i] + pos
@@ -170,36 +176,47 @@ func _tick() -> void:
 			
 			var neighbor_tile: Vector2i = cell_tiles[neighbor_pos]
 			
-			if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4) or \
-					neighbor_tile.y in [TILE_EMITTERS.y + 1, TILE_MODIFIER_NOT.y]:
-				var target_value := neighbor_tile.x
-				
-				if new_value != -1:
-					new_value = -1
-					break
-				
-				if neighbor_tile.y == TILE_MODIFIER_NOT.y:
-					target_value = (~target_value) & 0b111
-				
-				var target_dir := -1
-				if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
-					target_dir = neighbor_tile.y - TILE_OCTALS.y
-				
-				if target_dir != neighbor_i:
-					new_dir = (neighbor_i + 2) % 4
-					new_value = target_value
-					continue
+			if neighbor_tile in [TILE_EMPTY, TILE_PATH]:
+				continue
+			
+			var neighbor_value := -1
+			var neighbor_origin := -1
+			if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
+				neighbor_value = neighbor_tile.x
+				neighbor_origin = neighbor_tile.y - TILE_OCTALS.y
+			elif neighbor_tile.y == TILE_EMITTERS.y + 1:
+				neighbor_value = neighbor_tile.x
+			elif neighbor_tile.y in [TILE_MODIFIER_NOT.y]:
+				neighbor_value = (~neighbor_tile.x) & 0b111
+			
+			# Values do not travel back
+			if neighbor_origin == (neighbor_i + 2) % 4:
+				continue
+			
+			# Value gets erased, if the origin tile is empty
+			if neighbor_i == current_origin and neighbor_value == -1:
+				new_value = -1
+				break
+			
+			# Values remain until the origin tile is removed
+			if current_value != -1:
+				new_value = current_value
+				continue
+			
+			if neighbor_value != -1:
+				new_value = neighbor_value
+				new_origin = neighbor_i
 		
 		if current_value == new_value:
 			continue
 		
-		_tick_changes_occured = true
+		_tick_changes = true
 		
 		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4) or tile == TILE_CONDUCTOR:
 			if new_value == -1:
 				_particle_layer.set_cell(pos, 0, TILE_CONDUCTOR)
 			else:
-				_particle_layer.set_cell(pos, 0, TILE_OCTALS + Vector2i(new_value, new_dir))
+				_particle_layer.set_cell(pos, 0, TILE_OCTALS + Vector2i(new_value, new_origin))
 			continue
 		
 		if tile.y in [TILE_MODIFIERS.y, tile.y == TILE_MODIFIER_NOT.y]:
@@ -211,7 +228,15 @@ func _tick() -> void:
 
 
 func _tick_repeat() -> void:
-	_tick_changes_occured = true
-	while _tick_changes_occured:
-		_tick_changes_occured = false
+	var tick_count := 0
+	while true:
+		_tick_changes = false
 		_tick()
+		
+		if _tick_changes == false:
+			break
+		
+		tick_count += 1
+		if tick_count == tick_limit:
+			push_warning("Tick limit reached")
+			break
