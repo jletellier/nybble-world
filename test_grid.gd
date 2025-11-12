@@ -23,6 +23,7 @@ const TILE_EMPTY := Vector2i.ZERO
 const TILE_PATH := Vector2i(1, 0)
 const TILE_CONDUCTOR := Vector2i(2, 0)
 const TILE_OCTALS := Vector2i(0, 1)
+const TILE_OCTAL_HEADS := Vector2i(0, 13)
 const TILE_EMITTERS := Vector2i(0, 5)
 const TILE_MODIFIERS := Vector2i(0, 7)
 const TILE_MODIFIER_NOT := Vector2i(0, 8)
@@ -162,11 +163,11 @@ func _tick() -> void:
 		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 			current_value = tile.x
 			current_origin = tile.y - TILE_OCTALS.y
-		elif tile.y in [TILE_MODIFIER_NOT.y]:
+		elif tile.y in [TILE_OCTAL_HEADS.y, TILE_MODIFIER_NOT.y]:
 			current_value = tile.x
 		
-		var new_value := -1
-		var new_origin := -1
+		var new_value := current_value
+		var new_origin := current_origin
 		
 		for neighbor_i in VON_NEUMANN_NEIGHBORS.size():
 			var neighbor_pos := VON_NEUMANN_NEIGHBORS[neighbor_i] + pos
@@ -184,6 +185,8 @@ func _tick() -> void:
 			if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 				neighbor_value = neighbor_tile.x
 				neighbor_origin = neighbor_tile.y - TILE_OCTALS.y
+			elif neighbor_tile.y == TILE_OCTAL_HEADS.y:
+				neighbor_value = neighbor_tile.x
 			elif neighbor_tile.y == TILE_EMITTERS.y + 1:
 				neighbor_value = neighbor_tile.x
 			elif neighbor_tile.y in [TILE_MODIFIER_NOT.y]:
@@ -198,31 +201,41 @@ func _tick() -> void:
 				new_value = -1
 				break
 			
-			# Values remain until the origin tile is removed
+			# Existing values remain
 			if current_value != -1:
-				new_value = current_value
+				# Find origin for head
+				if current_value == neighbor_value and current_origin == -1:
+					new_origin = neighbor_i
 				continue
 			
-			if neighbor_value != -1:
+			# Values propagate only from direction-less tiles
+			if neighbor_value != -1 and neighbor_origin == -1:
 				new_value = neighbor_value
 				new_origin = neighbor_i
 		
-		if current_value == new_value:
+		if current_value == new_value and tile.y not in [TILE_OCTAL_HEADS.y, TILE_MODIFIER_NOT.y]:
 			continue
 		
 		_tick_changes = true
+		
+		if tile.y == TILE_OCTAL_HEADS.y:
+			_particle_layer.set_cell(pos, 0, TILE_OCTALS + Vector2i(tile.x, new_origin))
+			continue
 		
 		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4) or tile == TILE_CONDUCTOR:
 			if new_value == -1:
 				_particle_layer.set_cell(pos, 0, TILE_CONDUCTOR)
 			else:
-				_particle_layer.set_cell(pos, 0, TILE_OCTALS + Vector2i(new_value, new_origin))
+				_particle_layer.set_cell(pos, 0, TILE_OCTAL_HEADS + Vector2i(new_value, 0))
 			continue
 		
-		if tile.y in [TILE_MODIFIERS.y, tile.y == TILE_MODIFIER_NOT.y]:
-			if new_value == -1:
-				_particle_layer.set_cell(pos, 0, TILE_MODIFIERS + Vector2i(tile.y, 0))
-			else:
+		# FIXME: This doesn't work yet
+		if tile.y == TILE_MODIFIER_NOT.y:
+			_particle_layer.set_cell(pos, 0, Vector2i(TILE_MODIFIER_NOT.y - TILE_MODIFIERS.y, TILE_MODIFIERS.y))
+			continue
+		
+		if tile.y == TILE_MODIFIERS.y:
+			if new_value != -1:
 				_particle_layer.set_cell(pos, 0, TILE_MODIFIERS + Vector2i(new_value, tile.x))
 			continue
 
