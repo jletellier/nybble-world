@@ -25,6 +25,8 @@ const TILE_BLOCKED := Vector2i(1, 0)
 const TILE_OCTALS := Vector2i(0, 1)
 const TILE_EMITTERS := Vector2i(0, 5)
 const TILE_MODIFIERS := Vector2i(0, 7)
+const TILE_MODIFIER_NOT := Vector2i(2, 0)
+const TILE_MODIFIER_SHIFT := Vector2i(3, 0)
 const TILE_OBJECTS := Vector2i(0, 12)
 
 @export_tool_button("Tick Repeat") var tick_repeat_action := _tick_repeat
@@ -151,23 +153,29 @@ func _tick() -> void:
 	for pos in cell_positions:
 		var tile: Vector2i = cell_tiles[pos]
 		
-		if tile in [TILE_BLOCKED] or \
+		if tile in [TILE_BLOCKED, TILE_MODIFIER_NOT, TILE_MODIFIER_SHIFT] or \
 				tile.y in range(TILE_EMITTERS.y, TILE_EMITTERS.y + 1):
 			continue
 		
 		var current_value := -1
 		var current_dir := -1
+		var current_is_modifier := false
+		var neighbor_has_modifier_not := false
+		var neighbor_has_modifier_shift := false
+		
 		if tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 			current_value = tile.x
 			current_dir = tile.y - TILE_OCTALS.y
 		elif tile.y in range(TILE_MODIFIERS.y + 1, TILE_MODIFIERS.y + 5):
 			current_value = tile.x
-			current_dir = tile.y - TILE_MODIFIERS.y + 1
+			current_dir = tile.y - TILE_MODIFIERS.y - 1
+			current_is_modifier = true
 		elif tile.y == TILE_MODIFIERS.y:
 			current_dir = tile.x
+			current_is_modifier = true
 		
-		var new_value := current_value
-		var new_dir := current_dir
+		var new_value := -1
+		var new_dir := -1
 		
 		for neighbor_i in VON_NEUMANN_NEIGHBORS.size():
 			var neighbor_pos := VON_NEUMANN_NEIGHBORS[neighbor_i] + pos
@@ -180,26 +188,51 @@ func _tick() -> void:
 			if neighbor_tile in [TILE_BLOCKED]:
 				continue
 			
+			if neighbor_tile == TILE_MODIFIER_NOT:
+				neighbor_has_modifier_not = true
+				continue
+			
+			if neighbor_tile == TILE_MODIFIER_SHIFT:
+				neighbor_has_modifier_shift = true
+				continue
+			
+			# Modifiers output values into their direction
+			if current_is_modifier and current_dir == neighbor_i:
+				continue
+			
 			var neighbor_value := -1
 			var neighbor_dir := -1
 			if neighbor_tile.y in range(TILE_OCTALS.y, TILE_OCTALS.y + 4):
 				neighbor_value = neighbor_tile.x
 				neighbor_dir = neighbor_tile.y - TILE_OCTALS.y
+			elif neighbor_tile.y in range(TILE_MODIFIERS.y + 1, TILE_MODIFIERS.y + 5):
+				neighbor_value = neighbor_tile.x
+				neighbor_dir = neighbor_tile.y - TILE_MODIFIERS.y - 1
+			elif neighbor_tile.y == TILE_MODIFIERS.y:
+				neighbor_dir = neighbor_tile.x
 			elif neighbor_tile.y == TILE_EMITTERS.y + 1:
 				neighbor_value = neighbor_tile.x
 			
-			# Values travel only one direction
+			# Values travel only one direction,
 			if neighbor_dir != -1 and neighbor_dir != (neighbor_i + 2) % 4:
 				continue
 			
-			# Value gets erased, if the origin tile is empty
-			if (neighbor_i + 2) % 4 == current_dir and neighbor_value == -1:
-				new_value = -1
-				break
-			
-			if current_value == -1 and neighbor_value != -1:
+			# Valid neighbor spreads its value
+			if neighbor_value != -1:
+				# Unless there is more than one valid neighbor
+				if new_value != -1:
+					new_value = -1
+					break
+				
 				new_value = neighbor_value
 				new_dir = (neighbor_i + 2) % 4
+		
+		if new_value != -1:
+			if neighbor_has_modifier_not:
+				new_value = ~new_value & 0b111
+			
+			if neighbor_has_modifier_shift:
+				new_value = ((new_value << 1) | (new_value >> 2)) & 0b111
 		
 		if current_value == new_value:
 			continue
@@ -213,10 +246,12 @@ func _tick() -> void:
 				_particle_layer.set_cell(pos, 0, TILE_OCTALS + Vector2i(new_value, new_dir))
 			continue
 		
-		#if tile.y == TILE_MODIFIERS.y:
-			#if new_value != -1:
-				#_particle_layer.set_cell(pos, 0, TILE_MODIFIERS + Vector2i(new_value, tile.x))
-			#continue
+		if tile.y == TILE_MODIFIERS.y or tile.y in range(TILE_MODIFIERS.y + 1, TILE_MODIFIERS.y + 5):
+			if new_value == -1:
+				_particle_layer.set_cell(pos, 0, TILE_MODIFIERS + Vector2i(current_dir, 0))
+			else:
+				_particle_layer.set_cell(pos, 0, TILE_MODIFIERS + Vector2i(new_value, tile.x + 1))
+			continue
 
 
 func _tick_repeat() -> void:
